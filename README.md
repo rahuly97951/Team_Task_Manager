@@ -1,5 +1,9 @@
 # Team Task Manager
 
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-Open%20App-success?style=for-the-badge&logo=railway)](https://frontend-production-6854e.up.railway.app)
+[![Backend API](https://img.shields.io/badge/Backend-API-blue?style=for-the-badge&logo=express)](https://teamtaskmanager-production-2598.up.railway.app/api/health)
+[![GitHub](https://img.shields.io/badge/GitHub-Repo-181717?style=for-the-badge&logo=github)](https://github.com/rahuly97951/Team_Task_Manager)
+
 A full-stack collaborative Team Task Management web application.
 Users can create projects, assign tasks, track progress, and manage teams with role-based access (Admin / Member).
 
@@ -7,7 +11,7 @@ Users can create projects, assign tasks, track progress, and manage teams with r
 
 ## 🚀 Live Demo
 
-**👉 https://frontend-production-6854e.up.railway.app**
+### **👉 [Open the Live App](https://frontend-production-6854e.up.railway.app)**
 
 | Resource | URL |
 | --- | --- |
