@@ -1,6 +1,34 @@
 const crypto = require('crypto');
 const db = require('../config/db');
 
+// Convert raw DB row → frontend-friendly shape (mongo-style ids, populated assignee)
+const toApi = (t) => ({
+  _id: t.id,
+  title: t.title,
+  description: t.description,
+  project: t.projectId,
+  assignedTo: t.aId ? { _id: t.aId, name: t.aName, email: t.aEmail } : null,
+  priority: t.priority,
+  status: t.status,
+  dueDate: t.dueDate,
+  createdAt: t.createdAt,
+});
+
+const SELECT_WITH_ASSIGNEE = `
+  SELECT t.*, u.id AS aId, u.name AS aName, u.email AS aEmail
+  FROM tasks t
+  LEFT JOIN users u ON u.id = t.assignedTo
+`;
+
+// "YYYY-MM-DD" from <input type="date"> -> end-of-day UTC ISO so comparisons work
+const normalizeDueDate = (d) => {
+  if (!d) return null;
+  if (typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d)) {
+    return d + 'T23:59:59.999Z';
+  }
+  return d;
+};
+
 exports.create = ({ title, description, projectId, assignedTo, priority, status, dueDate }) => {
   const id = crypto.randomUUID();
   db.prepare(`
@@ -14,26 +42,23 @@ exports.create = ({ title, description, projectId, assignedTo, priority, status,
     assignedTo || null,
     priority || 'Medium',
     status || 'To Do',
-    dueDate || null
+    normalizeDueDate(dueDate)
   );
   return exports.findById(id);
 };
 
-exports.findById = (id) => db.prepare('SELECT * FROM tasks WHERE id = ?').get(id);
+exports.findById = (id) => {
+  const row = db.prepare(`${SELECT_WITH_ASSIGNEE} WHERE t.id = ?`).get(id);
+  return row ? toApi(row) : null;
+};
+
+// Internal: needed by controllers to check task ownership without populating
+exports.findRawById = (id) => db.prepare('SELECT * FROM tasks WHERE id = ?').get(id);
 
 exports.listForProject = (projectId) =>
-  db.prepare(`
-    SELECT t.*, u.name AS assigneeName, u.email AS assigneeEmail
-    FROM tasks t
-    LEFT JOIN users u ON u.id = t.assignedTo
-    WHERE t.projectId = ?
-    ORDER BY t.createdAt DESC
-  `).all(projectId).map((t) => ({
-    ...t,
-    assignedTo: t.assignedTo
-      ? { _id: t.assignedTo, name: t.assigneeName, email: t.assigneeEmail }
-      : null,
-  }));
+  db.prepare(`${SELECT_WITH_ASSIGNEE} WHERE t.projectId = ? ORDER BY t.createdAt DESC`)
+    .all(projectId)
+    .map(toApi);
 
 exports.update = (id, fields) => {
   const allowed = ['title', 'description', 'priority', 'status', 'dueDate', 'assignedTo'];
@@ -42,7 +67,9 @@ exports.update = (id, fields) => {
   for (const k of allowed) {
     if (fields[k] !== undefined) {
       sets.push(`${k} = ?`);
-      values.push(fields[k] === '' ? null : fields[k]);
+      let v = fields[k] === '' ? null : fields[k];
+      if (k === 'dueDate') v = normalizeDueDate(v);
+      values.push(v);
     }
   }
   if (sets.length === 0) return exports.findById(id);
