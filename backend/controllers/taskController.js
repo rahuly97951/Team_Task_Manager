@@ -1,22 +1,34 @@
 const Task = require('../models/Task');
 const Project = require('../models/Project');
 
+const shape = (t) => ({
+  _id: t.id,
+  title: t.title,
+  description: t.description,
+  project: t.projectId,
+  assignedTo: t.assignedTo || null,
+  priority: t.priority,
+  status: t.status,
+  dueDate: t.dueDate,
+  createdAt: t.createdAt,
+});
+
 exports.create = async (req, res, next) => {
   try {
     const { title, description, dueDate, priority, assignedTo } = req.body;
     if (!title) return res.status(400).json({ message: 'Title required' });
-    if (assignedTo && !req.project.getMemberRole(assignedTo)) {
+    if (assignedTo && !Project.getMemberRole(req.project.id, assignedTo)) {
       return res.status(400).json({ message: 'Assignee must be a project member' });
     }
-    const task = await Task.create({
+    const task = Task.create({
       title,
       description,
-      dueDate,
-      priority,
+      projectId: req.project.id,
       assignedTo: assignedTo || null,
-      project: req.project._id,
+      priority,
+      dueDate,
     });
-    res.status(201).json(task);
+    res.status(201).json(shape(task));
   } catch (err) {
     next(err);
   }
@@ -24,10 +36,7 @@ exports.create = async (req, res, next) => {
 
 exports.listForProject = async (req, res, next) => {
   try {
-    const tasks = await Task.find({ project: req.project._id })
-      .populate('assignedTo', 'name email')
-      .sort({ createdAt: -1 });
-    res.json(tasks);
+    res.json(Task.listForProject(req.project.id));
   } catch (err) {
     next(err);
   }
@@ -36,18 +45,16 @@ exports.listForProject = async (req, res, next) => {
 exports.updateStatus = async (req, res, next) => {
   try {
     const { status } = req.body;
-    const task = await Task.findById(req.params.id);
+    const task = Task.findById(req.params.id);
     if (!task) return res.status(404).json({ message: 'Task not found' });
-    const project = await Project.findById(task.project);
-    const role = project.getMemberRole(req.user._id);
+    const role = Project.getMemberRole(task.projectId, req.user.id);
     if (!role) return res.status(403).json({ message: 'Not a project member' });
-    const isAssignee = task.assignedTo && task.assignedTo.toString() === req.user._id.toString();
+    const isAssignee = task.assignedTo && task.assignedTo === req.user.id;
     if (role !== 'Admin' && !isAssignee) {
       return res.status(403).json({ message: 'Only assignee or Admin can update' });
     }
-    task.status = status || task.status;
-    await task.save();
-    res.json(task);
+    const updated = Task.update(task.id, { status });
+    res.json(shape(updated));
   } catch (err) {
     next(err);
   }
@@ -55,18 +62,13 @@ exports.updateStatus = async (req, res, next) => {
 
 exports.update = async (req, res, next) => {
   try {
-    const task = await Task.findById(req.params.id);
+    const task = Task.findById(req.params.id);
     if (!task) return res.status(404).json({ message: 'Task not found' });
-    const project = await Project.findById(task.project);
-    if (project.getMemberRole(req.user._id) !== 'Admin') {
+    if (Project.getMemberRole(task.projectId, req.user.id) !== 'Admin') {
       return res.status(403).json({ message: 'Admin role required' });
     }
-    const fields = ['title', 'description', 'dueDate', 'priority', 'assignedTo', 'status'];
-    fields.forEach((f) => {
-      if (req.body[f] !== undefined) task[f] = req.body[f];
-    });
-    await task.save();
-    res.json(task);
+    const updated = Task.update(task.id, req.body);
+    res.json(shape(updated));
   } catch (err) {
     next(err);
   }
@@ -74,13 +76,12 @@ exports.update = async (req, res, next) => {
 
 exports.remove = async (req, res, next) => {
   try {
-    const task = await Task.findById(req.params.id);
+    const task = Task.findById(req.params.id);
     if (!task) return res.status(404).json({ message: 'Task not found' });
-    const project = await Project.findById(task.project);
-    if (project.getMemberRole(req.user._id) !== 'Admin') {
+    if (Project.getMemberRole(task.projectId, req.user.id) !== 'Admin') {
       return res.status(403).json({ message: 'Admin role required' });
     }
-    await task.deleteOne();
+    Task.remove(task.id);
     res.json({ message: 'Deleted' });
   } catch (err) {
     next(err);

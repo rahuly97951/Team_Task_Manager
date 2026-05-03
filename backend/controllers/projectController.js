@@ -1,17 +1,28 @@
 const Project = require('../models/Project');
 const User = require('../models/User');
 
+const shapeProject = (p, members = null, role = null) => ({
+  _id: p.id,
+  name: p.name,
+  description: p.description,
+  createdBy: p.createdBy,
+  createdAt: p.createdAt,
+  members: members || [],
+  ...(role !== null ? { role } : {}),
+});
+
+const shapeMember = (m) => ({
+  user: { _id: m.id, name: m.name, email: m.email },
+  role: m.role,
+});
+
 exports.create = async (req, res, next) => {
   try {
     const { name, description } = req.body;
     if (!name) return res.status(400).json({ message: 'Project name required' });
-    const project = await Project.create({
-      name,
-      description,
-      createdBy: req.user._id,
-      members: [{ user: req.user._id, role: 'Admin' }],
-    });
-    res.status(201).json(project);
+    const project = Project.create({ name, description, createdBy: req.user.id });
+    const members = Project.listMembers(project.id).map(shapeMember);
+    res.status(201).json(shapeProject(project, members));
   } catch (err) {
     next(err);
   }
@@ -19,9 +30,14 @@ exports.create = async (req, res, next) => {
 
 exports.listMine = async (req, res, next) => {
   try {
-    const projects = await Project.find({ 'members.user': req.user._id })
-      .populate('createdBy', 'name email')
-      .sort({ createdAt: -1 });
+    const projects = Project.listForUser(req.user.id).map((p) => {
+      const members = Project.listMembers(p.id).map(shapeMember);
+      const creator = User.findById(p.createdBy);
+      return {
+        ...shapeProject(p, members),
+        createdBy: creator ? { _id: creator.id, name: creator.name, email: creator.email } : null,
+      };
+    });
     res.json(projects);
   } catch (err) {
     next(err);
@@ -30,9 +46,12 @@ exports.listMine = async (req, res, next) => {
 
 exports.detail = async (req, res, next) => {
   try {
-    const project = await Project.findById(req.project._id)
-      .populate('members.user', 'name email')
-      .populate('createdBy', 'name email');
+    const members = Project.listMembers(req.project.id).map(shapeMember);
+    const creator = User.findById(req.project.createdBy);
+    const project = {
+      ...shapeProject(req.project, members),
+      createdBy: creator ? { _id: creator.id, name: creator.name, email: creator.email } : null,
+    };
     res.json({ project, role: req.projectRole });
   } catch (err) {
     next(err);
@@ -42,14 +61,14 @@ exports.detail = async (req, res, next) => {
 exports.addMember = async (req, res, next) => {
   try {
     const { email } = req.body;
-    const user = await User.findOne({ email });
+    const user = User.findByEmail(email);
     if (!user) return res.status(404).json({ message: 'User not found' });
-    if (req.project.getMemberRole(user._id)) {
+    if (Project.getMemberRole(req.project.id, user.id)) {
       return res.status(409).json({ message: 'Already a member' });
     }
-    req.project.members.push({ user: user._id, role: 'Member' });
-    await req.project.save();
-    res.json(req.project);
+    Project.addMember(req.project.id, user.id, 'Member');
+    const members = Project.listMembers(req.project.id).map(shapeMember);
+    res.json(shapeProject(req.project, members));
   } catch (err) {
     next(err);
   }
@@ -58,12 +77,12 @@ exports.addMember = async (req, res, next) => {
 exports.removeMember = async (req, res, next) => {
   try {
     const { uid } = req.params;
-    if (req.project.createdBy.toString() === uid) {
+    if (req.project.createdBy === uid) {
       return res.status(400).json({ message: 'Cannot remove project creator' });
     }
-    req.project.members = req.project.members.filter((m) => m.user.toString() !== uid);
-    await req.project.save();
-    res.json(req.project);
+    Project.removeMember(req.project.id, uid);
+    const members = Project.listMembers(req.project.id).map(shapeMember);
+    res.json(shapeProject(req.project, members));
   } catch (err) {
     next(err);
   }

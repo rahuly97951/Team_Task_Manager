@@ -11,13 +11,15 @@ Users can create projects, assign tasks, track progress, and manage teams with r
 
 ## Tech Stack
 
-| Layer    | Technology                        |
-| -------- | --------------------------------- |
-| Frontend | React (Vite), React Router, Axios |
-| Backend  | Node.js, Express                  |
-| Database | MongoDB (Mongoose)                |
-| Auth     | JWT + bcrypt                      |
-| Deploy   | Railway                           |
+| Layer    | Technology                                     |
+| -------- | ---------------------------------------------- |
+| Frontend | React (Vite), React Router, Axios              |
+| Backend  | Node.js 22+, Express                           |
+| Database | SQLite (`node:sqlite` — built-in, no install)  |
+| Auth     | JWT + bcrypt                                   |
+| Deploy   | Railway                                        |
+
+> **Why SQLite?** Zero external services to set up — the database is a single file inside the backend container. No MongoDB Atlas, no separate database service, no connection strings. The assignment allows SQL or NoSQL.
 
 ---
 
@@ -36,22 +38,26 @@ Users can create projects, assign tasks, track progress, and manage teams with r
 ```
 Team_Task_Manager/
 ├── backend/
-│   ├── config/db.js
-│   ├── models/        # User, Project, Task
-│   ├── controllers/   # auth, project, task, dashboard
-│   ├── middleware/    # auth, role, errorHandler
-│   ├── routes/        # /api/auth, /api/projects, /api/tasks, /api/dashboard
+│   ├── config/db.js         # SQLite connection + schema
+│   ├── models/              # User, Project, Task (query helpers)
+│   ├── controllers/         # auth, project, task, dashboard
+│   ├── middleware/          # auth, projectAccess, errorHandler
+│   ├── routes/              # /api/auth, /api/projects, /api/tasks, /api/dashboard
+│   ├── tests/               # node:test + supertest integration tests
 │   ├── server.js
-│   ├── .env.example
+│   ├── seed.js              # populate demo data
+│   ├── nixpacks.toml        # Railway: Node 22
+│   ├── railway.json
 │   └── package.json
 ├── frontend/
 │   ├── src/
-│   │   ├── pages/     # Login, Signup, Dashboard, Projects, ProjectDetail
-│   │   ├── components/
-│   │   ├── context/   # AuthContext
+│   │   ├── pages/           # Login, Signup, Projects, ProjectDetail
+│   │   ├── components/Navbar.jsx
+│   │   ├── context/AuthContext.jsx
 │   │   └── api/axios.js
 │   ├── index.html
 │   ├── vite.config.js
+│   ├── railway.json
 │   └── package.json
 └── README.md
 ```
@@ -61,8 +67,7 @@ Team_Task_Manager/
 ## Local Setup
 
 ### Prerequisites
-- Node.js 18+
-- MongoDB (local or [MongoDB Atlas](https://www.mongodb.com/atlas) free cluster)
+- **Node.js 22.5+** (uses built-in `node:sqlite`)
 
 ### 1. Clone
 ```bash
@@ -74,20 +79,30 @@ cd Team_Task_Manager
 ```bash
 cd backend
 npm install
-cp .env.example .env       # then fill in MONGO_URI and JWT_SECRET
-npm run dev                # starts on http://localhost:5000
+cp .env.example .env       # edit JWT_SECRET (any long random string)
 npm run seed               # (optional) populate demo users + project + tasks
-npm test                   # run integration tests (needs local MongoDB)
+npm run dev                # http://localhost:5000
+npm test                   # 12 integration tests
 ```
 
 ### 3. Frontend
 ```bash
 cd ../frontend
 npm install
-npm run dev                # starts on http://localhost:5173
+npm run dev                # http://localhost:5173
 ```
 
 The frontend reads `VITE_API_URL` (defaults to `http://localhost:5000/api`).
+
+---
+
+## Demo Credentials (after `npm run seed`)
+
+| Email           | Password    | Role    |
+| --------------- | ----------- | ------- |
+| alice@demo.com  | password123 | Admin   |
+| bob@demo.com    | password123 | Member  |
+| carol@demo.com  | password123 | Member  |
 
 ---
 
@@ -96,9 +111,9 @@ The frontend reads `VITE_API_URL` (defaults to `http://localhost:5000/api`).
 ### Backend (`backend/.env`)
 ```
 PORT=5000
-MONGO_URI=mongodb+srv://<user>:<pass>@cluster.mongodb.net/teamtaskmanager
 JWT_SECRET=replace_with_a_long_random_string
 CLIENT_URL=http://localhost:5173
+# Optional: DB_PATH=/data/app.db   (Railway volume mount path)
 ```
 
 ### Frontend (`frontend/.env`)
@@ -142,33 +157,44 @@ VITE_API_URL=http://localhost:5000/api
 
 ---
 
-## Deployment (Railway)
+## Deployment (Railway) — minimal click sequence
 
-1. Push the repo to GitHub.
-2. On [Railway](https://railway.app) → **New Project → Deploy from GitHub** → select this repo.
-3. Create **two services**:
-   - **Backend service** — Root: `backend`, Start: `npm start`. Add env vars: `MONGO_URI`, `JWT_SECRET`, `CLIENT_URL`.
-   - **Frontend service** — Root: `frontend`, Build: `npm run build`, Start: `npm run preview -- --host 0.0.0.0 --port $PORT`. Add env: `VITE_API_URL=<your backend public URL>/api`.
-4. Generate a public domain for each service. Update `CLIENT_URL` (backend) and `VITE_API_URL` (frontend) accordingly and redeploy.
+Because we use SQLite, **no separate database service is needed.** Just two web services from the same repo.
+
+### Backend service
+1. **New Project → Deploy from GitHub repo** → pick `Team_Task_Manager`
+2. Click into the service → **Settings**:
+   - **Root Directory:** `backend`
+3. **Variables** tab → add:
+   - `JWT_SECRET` = any long random string
+4. **Settings → Networking → Generate Domain** → copy URL (e.g. `backend-prod.up.railway.app`)
+5. *(Optional but recommended for data persistence across redeploys)* **Settings → Volumes → + New Volume**:
+   - **Mount path:** `/data`
+   - Then **Variables** → add `DB_PATH = /data/app.db`
+
+### Frontend service (same project, same repo)
+1. Project canvas → **+ Create → GitHub Repo** → same repo
+2. **Settings**:
+   - **Service Name:** `frontend`
+   - **Root Directory:** `frontend`
+3. **Variables**:
+   - `VITE_API_URL = https://<your-backend-url>/api`
+4. **Settings → Networking → Generate Domain** → copy URL
+
+### Wire CORS
+Go back to **backend service → Variables**:
+- `CLIENT_URL = https://<your-frontend-url>`
+
+Backend redeploys automatically. Open the frontend URL — done.
 
 ---
 
 ## Submission Checklist
 
-- [ ] Live URL (Railway)
-- [ ] GitHub repo: https://github.com/rahuly97951/Team_Task_Manager.git
-- [ ] README with setup + deploy steps (this file)
+- [ ] Live URL (Railway frontend domain)
+- [x] GitHub repo: https://github.com/rahuly97951/Team_Task_Manager.git
+- [x] README with setup + deploy steps
 - [ ] 2–5 minute demo video
-
----
-
-## Demo Credentials (after `npm run seed`)
-
-| Email           | Password    | Role    |
-| --------------- | ----------- | ------- |
-| alice@demo.com  | password123 | Admin   |
-| bob@demo.com    | password123 | Member  |
-| carol@demo.com  | password123 | Member  |
 
 ---
 

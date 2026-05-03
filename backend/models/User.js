@@ -1,29 +1,28 @@
-const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
+const db = require('../config/db');
 
-const userSchema = new mongoose.Schema(
-  {
-    name: { type: String, required: true, trim: true },
-    email: { type: String, required: true, unique: true, lowercase: true, trim: true },
-    password: { type: String, required: true, minlength: 6 },
-  },
-  { timestamps: true }
-);
-
-userSchema.pre('save', async function (next) {
-  if (!this.isModified('password')) return next();
-  this.password = await bcrypt.hash(this.password, 10);
-  next();
-});
-
-userSchema.methods.matchPassword = function (entered) {
-  return bcrypt.compare(entered, this.password);
+const stripPwd = (u) => {
+  if (!u) return null;
+  const { password, ...rest } = u;
+  return rest;
 };
 
-userSchema.methods.toJSON = function () {
-  const obj = this.toObject();
-  delete obj.password;
-  return obj;
+exports.create = async ({ name, email, password }) => {
+  const id = crypto.randomUUID();
+  const hashed = await bcrypt.hash(password, 10);
+  db.prepare('INSERT INTO users (id, name, email, password) VALUES (?, ?, ?, ?)')
+    .run(id, name, email.toLowerCase(), hashed);
+  return stripPwd(exports.findRawById(id));
 };
 
-module.exports = mongoose.model('User', userSchema);
+exports.findRawById = (id) => db.prepare('SELECT * FROM users WHERE id = ?').get(id);
+
+exports.findById = (id) => stripPwd(exports.findRawById(id));
+
+exports.findByEmail = (email) =>
+  db.prepare('SELECT * FROM users WHERE email = ?').get((email || '').toLowerCase());
+
+exports.matchPassword = (raw, hash) => bcrypt.compare(raw, hash);
+
+exports.deleteAll = () => db.prepare('DELETE FROM users').run();

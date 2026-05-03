@@ -1,26 +1,28 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const mongoose = require('mongoose');
+const fs = require('fs');
+const path = require('path');
 const request = require('supertest');
 
 process.env.JWT_SECRET = process.env.JWT_SECRET || 'test_secret';
-process.env.MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/teamtaskmanager_test';
+process.env.DB_PATH = path.join(__dirname, 'test_auth.db');
+try { fs.unlinkSync(process.env.DB_PATH); } catch {}
 
 const app = require('../app');
 const User = require('../models/User');
 const Project = require('../models/Project');
 const Task = require('../models/Task');
 
-test.before(async () => {
-  await mongoose.connect(process.env.MONGO_URI);
+test.beforeEach(() => {
+  Task.deleteAll();
+  Project.deleteAll();
+  User.deleteAll();
 });
 
-test.beforeEach(async () => {
-  await Promise.all([User.deleteMany({}), Project.deleteMany({}), Task.deleteMany({})]);
-});
-
-test.after(async () => {
-  await mongoose.disconnect();
+test.after(() => {
+  try { fs.unlinkSync(process.env.DB_PATH); } catch {}
+  try { fs.unlinkSync(process.env.DB_PATH + '-wal'); } catch {}
+  try { fs.unlinkSync(process.env.DB_PATH + '-shm'); } catch {}
 });
 
 test('health check returns ok', async () => {

@@ -1,10 +1,12 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const mongoose = require('mongoose');
+const fs = require('fs');
+const path = require('path');
 const request = require('supertest');
 
 process.env.JWT_SECRET = process.env.JWT_SECRET || 'test_secret';
-process.env.MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/teamtaskmanager_test';
+process.env.DB_PATH = path.join(__dirname, 'test_projects.db');
+try { fs.unlinkSync(process.env.DB_PATH); } catch {}
 
 const app = require('../app');
 const User = require('../models/User');
@@ -13,12 +15,10 @@ const Task = require('../models/Task');
 
 let adminToken, memberToken, memberId;
 
-test.before(async () => {
-  await mongoose.connect(process.env.MONGO_URI);
-});
-
 test.beforeEach(async () => {
-  await Promise.all([User.deleteMany({}), Project.deleteMany({}), Task.deleteMany({})]);
+  Task.deleteAll();
+  Project.deleteAll();
+  User.deleteAll();
   const a = await request(app).post('/api/auth/signup')
     .send({ name: 'Admin', email: 'admin@t.com', password: 'password123' });
   adminToken = a.body.token;
@@ -28,8 +28,10 @@ test.beforeEach(async () => {
   memberId = m.body.user._id;
 });
 
-test.after(async () => {
-  await mongoose.disconnect();
+test.after(() => {
+  try { fs.unlinkSync(process.env.DB_PATH); } catch {}
+  try { fs.unlinkSync(process.env.DB_PATH + '-wal'); } catch {}
+  try { fs.unlinkSync(process.env.DB_PATH + '-shm'); } catch {}
 });
 
 test('create project sets creator as Admin', async () => {
