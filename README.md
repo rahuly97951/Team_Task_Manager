@@ -5,7 +5,16 @@ Users can create projects, assign tasks, track progress, and manage teams with r
 
 > Built as a simplified version of tools like Trello / Asana.
 
-**Repository:** https://github.com/rahuly97951/Team_Task_Manager.git
+## 🚀 Live Demo
+
+**👉 https://frontend-production-6854e.up.railway.app**
+
+| Resource | URL |
+| --- | --- |
+| Live App | https://frontend-production-6854e.up.railway.app |
+| Backend API | https://teamtaskmanager-production-2598.up.railway.app/api |
+| Health Check | https://teamtaskmanager-production-2598.up.railway.app/api/health |
+| Repository | https://github.com/rahuly97951/Team_Task_Manager |
 
 ---
 
@@ -191,8 +200,8 @@ Backend redeploys automatically. Open the frontend URL — done.
 
 ## Submission Checklist
 
-- [ ] Live URL (Railway frontend domain)
-- [x] GitHub repo: https://github.com/rahuly97951/Team_Task_Manager.git
+- [x] **Live URL:** https://frontend-production-6854e.up.railway.app
+- [x] GitHub repo: https://github.com/rahuly97951/Team_Task_Manager
 - [x] README with setup + deploy steps
 - [ ] 2–5 minute demo video
 
